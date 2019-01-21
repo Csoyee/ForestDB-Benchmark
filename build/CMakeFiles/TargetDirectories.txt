@@ -1,0 +1,5 @@
+/home/csoyee/SKT/Working/ForestDB-Benchmark/build/CMakeFiles/couch_bench.dir
+/home/csoyee/SKT/Working/ForestDB-Benchmark/build/CMakeFiles/fdb_bench.dir
+/home/csoyee/SKT/Working/ForestDB-Benchmark/build/CMakeFiles/leveldb_bench.dir
+/home/csoyee/SKT/Working/ForestDB-Benchmark/build/CMakeFiles/rocksdb_bench.dir
+/home/csoyee/SKT/Working/ForestDB-Benchmark/build/CMakeFiles/wt_bench.dir

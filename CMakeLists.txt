@@ -6,8 +6,18 @@ include_directories(BEFORE ${CMAKE_SOURCE_DIR}/include)
 include_directories(BEFORE ${CMAKE_SOURCE_DIR}/wrappers)
 include_directories(BEFORE ${CMAKE_INCLUDE_PATH})
 
+SET(CMAKE_CXX_FLAGS "-std=c++11 -O3")
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -D__DEBUG")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L${CMAKE_LIBRARY_PATH} -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/build")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/test")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/src")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/option")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/utils")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/tools")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/home/csoyee/SKT/Working/skt-redis-rocksdb/nvkvs/deps/forestdb/include")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__SY")
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
