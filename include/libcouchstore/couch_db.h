@@ -111,6 +111,12 @@ extern "C" {
     LIBCOUCHSTORE_API
     couchstore_error_t couchstore_close_file(Db* db);
 
+#ifdef __SY
+    /* SY ADD */
+    LIBCOUCHSTORE_API
+    couchstore_error_t print_couchstore_ops_info(Db* db);
+#endif
+
     /**
      * Rewind a db handle to the next-oldest header still present in the file.
      * If there is no next-oldest header, the db handle will be *closed*, and

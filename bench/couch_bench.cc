@@ -943,6 +943,144 @@ int iterate_callback(Db *db,
 #define MAX_BATCHSIZE (65536)
 #define DUP_CHECK_MAX_TICKS (8)
 
+#ifdef __SY
+
+void _create_doc_sy(struct bench_info *binfo,
+                 Doc **pdoc,
+                 DocInfo **pinfo, 
+		 char *key, int datasize) {
+    
+	Doc *doc = *pdoc;
+	DocInfo *info = *pinfo;
+    	char keybuf[MAX_KEYLEN];
+
+    	if (!doc) {
+    	    doc = (Doc *)malloc(sizeof(Doc));
+   	     doc->id.buf = NULL;
+   	     doc->data.buf = NULL;
+    	}
+	doc->id.buf = key;
+	doc->id.size = strlen(key);
+
+	doc->data.size = datasize;
+	// align to 8 bytes (sizeof(uint64_t))
+	doc->data.size = (size_t)((doc->data.size+1) / (sizeof(uint64_t)*1)) *
+                     (sizeof(uint64_t)*1);
+	if (!doc->data.buf) {
+        	int max_bodylen, avg_bodylen;
+        	int i, abt_array_size, rnd_str_len;
+        	char *abt_array = (char*)"abcdefghijklmnopqrstuvwxyz"
+        	                         "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+        	abt_array_size = strlen(abt_array);
+	
+	        if (binfo->bodylen.type == RND_NORMAL) {
+	            max_bodylen = binfo->bodylen.a + binfo->bodylen.b * 6;
+	            avg_bodylen = binfo->bodylen.a;
+	        } else {
+	            // uniform
+	            max_bodylen = binfo->bodylen.b + 16;
+	            avg_bodylen = (binfo->bodylen.a + binfo->bodylen.b)/2;
+	        }
+	        doc->data.buf = (char *)malloc(max_bodylen);
+	
+	        if (binfo->compressibility == 0) {
+	            // all random string
+	            rnd_str_len = max_bodylen;
+	        } else if (binfo->compressibility == 100) {
+	            // repetition of same character
+	            rnd_str_len = 0;
+	        } else {
+	            // mixed
+	            rnd_str_len = avg_bodylen * (100 - binfo->compressibility);
+	            rnd_str_len /= 100;
+	        }
+	
+	        memset(doc->data.buf, 'x', max_bodylen);
+	        for (i=0;i<rnd_str_len;++i){
+	            doc->data.buf[i] = abt_array[rand() % abt_array_size];
+	        }
+	}
+	memcpy(doc->data.buf + doc->data.size - 5, (void*)"<end>", 5);
+	memset((uint8_t*)doc->data.buf + doc->data.size, 0x0, 1);
+
+	    if (!info)
+	        info = (DocInfo*)malloc(sizeof(DocInfo));
+	
+	    memset(info, 0, sizeof(DocInfo));
+	    info->id = doc->id;
+	    info->rev_meta.buf = (char *)metabuf;
+	    info->rev_meta.size = 4;
+	    info->content_meta = (binfo->compression)?(COUCH_DOC_IS_COMPRESSED):(0);
+	
+	    *pdoc = doc;
+	    *pinfo = info;
+}
+	
+void * bench_thread(void *voidargs)
+{
+	struct bench_thread_args * args = (struct bench_thread_args *)voidargs;
+	FILE * trace;
+	char buf[512];
+	char *keyString, *ptr, *tok;
+	int data_size, count;
+	couchstore_error_t err = COUCHSTORE_SUCCESS;
+    	Db **db;
+    	Doc *rq_doc = NULL;
+    	DocInfo *rq_info = NULL;
+	struct bench_info *binfo = args->binfo;
+
+	db = args->db;
+
+	// READ FILE
+	trace = fopen ("./YCSB_TRACE/test.txt", "r");
+
+	while (1) {
+		fgets (buf, 512, trace);
+		if (feof(trace))
+			break;
+
+		ptr = strchr(buf, '#');
+		if(ptr[2] == 'I') {
+			// insert
+			ptr = ptr +4;
+			tok = strtok(ptr, " ");
+			count = 0;
+			do {
+				if(count == 0 ){
+					keyString = tok;
+				} else {
+					sscanf(tok, "%d", &data_size);
+				}
+				count ++;
+			} while (tok = strtok(NULL, " "));
+                	
+			_create_doc_sy(binfo, &rq_doc, &rq_info, keyString, data_size);
+			err = couchstore_save_document(db[0], rq_doc,
+                                               rq_info, binfo->compression);
+			
+			if(err != 0) {
+				printf("fdb_set failed\n");
+			}
+            		args->b_stat->op_count_write ++;
+		} else if (ptr[2] == 'R') {
+			// read
+			ptr = ptr+4;
+			ptr[strlen(ptr)-1] = 0;
+                	err = couchstore_open_document(db[0], keyString,
+                                               strlen(keyString), &rq_doc, binfo->compression);
+                	if (err == COUCHSTORE_SUCCESS) {
+                	    rq_doc->id.buf = NULL;
+                	    couchstore_free_document(rq_doc);
+                	    rq_doc = NULL;
+                	}
+            		args->b_stat->op_count_read ++;
+		}
+	}
+
+	fclose (trace);
+}
+
+#else /*__SY*/
 void * bench_thread(void *voidargs)
 {
     struct bench_thread_args *args = (struct bench_thread_args *)voidargs;
@@ -1435,7 +1573,7 @@ void * bench_thread(void *voidargs)
 
     return NULL;
 }
-
+#endif
 void _wait_leveldb_compaction(struct bench_info *binfo, Db **db)
 {
     int n=6;
@@ -1702,6 +1840,7 @@ void do_bench(struct bench_info *binfo)
         // === initialize and populate files ========
 
         // check if previous file exists
+#ifndef __SY
         if (_dir_scan(binfo, NULL)) {
             // ask user
             char answer[64], *ret;
@@ -1723,7 +1862,7 @@ void do_bench(struct bench_info *binfo)
         lprintf("\ninitialize\n");
         sprintf(cmd, "rm -rf %s* 2> errorlog.txt", binfo->filename);
         ret = system(cmd);
-
+#endif
         // create directory if doesn't exist
         str = _get_dirname(binfo->filename, bodybuf);
         if (str) {
@@ -1763,7 +1902,9 @@ void do_bench(struct bench_info *binfo)
         }
 
         stopwatch_start(&sw);
+#ifndef __SY
         population(db, binfo);
+#endif 
 
 #if  defined(__PRINT_IOSTAT) && \
     (defined(__LEVEL_BENCH) || defined(__ROCKS_BENCH))
@@ -1773,14 +1914,14 @@ void do_bench(struct bench_info *binfo)
         print_proc_io_stat(cmd, 1);
         _wait_leveldb_compaction(binfo, db);
 #endif // __PRINT_IOSTAT && (__LEVEL_BENCH || __ROCKS_BENCH)
-
+#ifndef __SY
         if (binfo->sync_write) {
             lprintf("flushing disk buffer.. "); fflush(stdout);
             sprintf(cmd, "sync");
             ret = system(cmd);
             lprintf("done\n"); fflush(stdout);
         }
-
+#endif
         written_final = written_init = print_proc_io_stat(cmd, 1);
         written_prev = written_final;
 
@@ -1857,6 +1998,11 @@ void do_bench(struct bench_info *binfo)
     spin_init(&l_write.lock);
 
     // thread args
+#ifdef __SY
+    bench_threads = 1;
+    b_args = alca(struct bench_thread_args, bench_threads);
+    bench_worker = alca(thread_t, bench_threads);
+#else
     if (binfo->nreaders + binfo->niterators + binfo->nwriters == 0){
         // create a dummy thread
         bench_threads = 1;
@@ -1878,8 +2024,10 @@ void do_bench(struct bench_info *binfo)
             }
         }
     }
+#endif 
 
     bench_worker_ret = alca(void*, bench_threads);
+    couchstore_error_t err;
     for (i=0;i<bench_threads;++i){
         b_args[i].id = i;
         b_args[i].rnd_seed = rnd_seed;
@@ -1903,14 +2051,14 @@ void do_bench(struct bench_info *binfo)
         b_args[i].db = (Db**)malloc(sizeof(Db*) * binfo->nfiles);
         for (j=0; j<(int)binfo->nfiles; ++j){
             sprintf(curfile, "%s%d.%d", binfo->filename, j, compaction_no[j]);
-            couchstore_open_db(curfile,
+            err= couchstore_open_db(curfile,
                                COUCHSTORE_OPEN_FLAG_CREATE |
                                    ((binfo->sync_write)?(0x10):(0x0)),
                                &b_args[i].db[j]);
 #if defined(__FDB_BENCH)
             // ForestDB: open another handle to get DB info
             if (i==0) {
-                couchstore_open_db(curfile,
+                err = couchstore_open_db(curfile,
                                    COUCHSTORE_OPEN_FLAG_CREATE |
                                        ((binfo->sync_write)?(0x10):(0x0)),
                                    &info_handle[j]);
@@ -1931,6 +2079,7 @@ void do_bench(struct bench_info *binfo)
         } else {
             b_args[i].db = b_args[0].db;
         }
+
 #endif
         thread_create(&bench_worker[i], bench_thread, (void*)&b_args[i]);
     }
@@ -2226,8 +2375,8 @@ void do_bench(struct bench_info *binfo)
             }
 
             if (binfo->bench_secs && !warmingup &&
-                (size_t)sw.elapsed.tv_sec >= binfo->bench_secs)
-                break;
+                (size_t)sw.elapsed.tv_sec >= binfo->bench_secs) 
+                break; // while break..
 
             if (warmingup &&
                 (size_t)sw.elapsed.tv_sec >= binfo->warmup_secs) {
@@ -2269,7 +2418,6 @@ void do_bench(struct bench_info *binfo)
             break;
         }
     }
-
     // terminate all bench_worker threads
     for (i=0;i<bench_threads;++i){
         b_args[i].terminate_signal = 1;
@@ -2314,6 +2462,10 @@ void do_bench(struct bench_info *binfo)
     lprintf("total %" _F64 " operations (%.2f ops/sec) performed\n",
             op_count_read + op_count_write,
              (double)(op_count_read + op_count_write) / gap_double);
+
+#ifdef __SY
+    print_couchstore_ops_info (b_args[0].db[0]);
+#endif
 
 #if defined(__FDB_BENCH) || defined(__COUCH_BENCH)
     if (!binfo->auto_compaction) {
@@ -2364,11 +2516,9 @@ void do_bench(struct bench_info *binfo)
     if (binfo->batch_dist.type == RND_ZIPFIAN) {
         zipf_rnd_free(&zipf);
     }
-
-#ifdef __FDB_BENCH
+    
     // print ForestDB's own block cache info (internal function call)
     //bcache_print_items();
-#endif
 
     printf("waiting for termination of DB module..\n");
 #if defined(__FDB_BENCH) || defined(__COUCH_BENCH) || defined(__WT_BENCH)
@@ -2377,7 +2527,7 @@ void do_bench(struct bench_info *binfo)
             couchstore_close_db(b_args[i].db[j]);
 #ifdef __FDB_BENCH
             if (i==0) {
-                couchstore_close_db(info_handle[j]);
+               // couchstore_close_db(info_handle[j]); // TODO: handle segfault
             }
 #endif
         }

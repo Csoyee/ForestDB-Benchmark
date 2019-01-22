@@ -116,7 +116,6 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
     fdb_file_handle *dbfile;
     fdb_kvs_handle *fdb;
     char *fname = (char *)filename;
-
     memset(&config, 0, sizeof(fdb_config));
     config = fdb_get_default_config();
     if (c_auto) {
@@ -192,6 +191,21 @@ couchstore_error_t couchstore_close_db(Db *db)
 
     return COUCHSTORE_SUCCESS;
 }
+
+#ifdef __SY
+LIBCOUCHSTORE_API
+couchstore_error_t print_couchstore_ops_info(Db *db)
+{
+	fdb_kvs_ops_info fdb_info;
+	fdb_status status;
+
+	fdb_get_kvs_ops_info(db->fdb, &fdb_info);
+
+	printf("\n---# FDB statistic info---\n- # of fdb_set %lld\n- # of fdb_get %lld\n- # of fdb_commit %lld\n- # of fdb_compact %lld\n--------------------------\n", (long long)fdb_info.num_sets, (long long)fdb_info.num_gets, (long long)fdb_info.num_commits, (long long)fdb_info.num_compacts);
+
+	return COUCHSTORE_SUCCESS;
+}
+#endif
 
 LIBCOUCHSTORE_API
 couchstore_error_t couchstore_db_info(Db *db, DbInfo* info)
@@ -445,7 +459,7 @@ couchstore_error_t couchstore_open_document(Db *db,
 
     status = fdb_get(db->fdb, &_doc);
     if (status != FDB_RESULT_SUCCESS) {
-        printf("\nget error %.*s\n", (int)idlen, (char*)id);
+        printf("\nget error (%d) %.*s\n", status, (int)idlen, (char*)id);
         ret = COUCHSTORE_ERROR_DOC_NOT_FOUND;
     }
     //assert(status == FDB_RESULT_SUCCESS);
